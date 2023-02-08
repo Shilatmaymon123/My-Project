@@ -1,0 +1,961 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>reports.html</title>
+    <link href="assets/style.css" rel="stylesheet" type="text/css" />
+  </head>
+  <body onLoad="init()">
+    <script>
+      /* This Source Code Form is subject to the terms of the Mozilla Public
+       * License, v. 2.0. If a copy of the MPL was not distributed with this file,
+       * You can obtain one at http://mozilla.org/MPL/2.0/. */
+
+      function toArray(iter) {
+        if (iter === null) {
+          return null;
+        }
+        return Array.prototype.slice.call(iter);
+      }
+
+      function find(selector, elem) {
+        // eslint-disable-line no-redeclare
+        if (!elem) {
+          elem = document;
+        }
+        return elem.querySelector(selector);
+      }
+
+      function findAll(selector, elem) {
+        if (!elem) {
+          elem = document;
+        }
+        return toArray(elem.querySelectorAll(selector));
+      }
+
+      function sortColumn(elem) {
+        toggleSortStates(elem);
+        const colIndex = toArray(elem.parentNode.childNodes).indexOf(elem);
+        let key;
+        if (elem.classList.contains("result")) {
+          key = keyResult;
+        } else if (elem.classList.contains("links")) {
+          key = keyLink;
+        } else {
+          key = keyAlpha;
+        }
+        sortTable(elem, key(colIndex));
+      }
+
+      function showAllExtras() {
+        // eslint-disable-line no-unused-vars
+        findAll(".col-result").forEach(showExtras);
+      }
+
+      function hideAllExtras() {
+        // eslint-disable-line no-unused-vars
+        findAll(".col-result").forEach(hideExtras);
+      }
+
+      function showExtras(colresultElem) {
+        const extras = colresultElem.parentNode.nextElementSibling;
+        const expandcollapse = colresultElem.firstElementChild;
+        extras.classList.remove("collapsed");
+        expandcollapse.classList.remove("expander");
+        expandcollapse.classList.add("collapser");
+      }
+
+      function hideExtras(colresultElem) {
+        const extras = colresultElem.parentNode.nextElementSibling;
+        const expandcollapse = colresultElem.firstElementChild;
+        extras.classList.add("collapsed");
+        expandcollapse.classList.remove("collapser");
+        expandcollapse.classList.add("expander");
+      }
+
+      function showFilters() {
+        let visibleString = getQueryParameter("visible") || "all";
+        visibleString = visibleString.toLowerCase();
+        const checkedItems = visibleString.split(",");
+
+        const filterItems = document.getElementsByClassName("filter");
+        for (let i = 0; i < filterItems.length; i++) {
+          filterItems[i].hidden = false;
+
+          if (visibleString != "all") {
+            filterItems[i].checked = checkedItems.includes(
+              filterItems[i].getAttribute("data-test-result")
+            );
+            filterTable(filterItems[i]);
+          }
+        }
+      }
+
+      function addCollapse() {
+        // Add links for show/hide all
+        const resulttable = find("table#results-table");
+        const showhideall = document.createElement("p");
+        showhideall.innerHTML =
+          '<a href="javascript:showAllExtras()">Show all details</a> / ' +
+          '<a href="javascript:hideAllExtras()">Hide all details</a>';
+        resulttable.parentElement.insertBefore(showhideall, resulttable);
+
+        // Add show/hide link to each result
+        findAll(".col-result").forEach(function (elem) {
+          const collapsed = getQueryParameter("collapsed") || "Passed";
+          const extras = elem.parentNode.nextElementSibling;
+          const expandcollapse = document.createElement("span");
+          if (extras.classList.contains("collapsed")) {
+            expandcollapse.classList.add("expander");
+          } else if (collapsed.includes(elem.innerHTML)) {
+            extras.classList.add("collapsed");
+            expandcollapse.classList.add("expander");
+          } else {
+            expandcollapse.classList.add("collapser");
+          }
+          elem.appendChild(expandcollapse);
+
+          elem.addEventListener("click", function (event) {
+            if (
+              event.currentTarget.parentNode.nextElementSibling.classList.contains(
+                "collapsed"
+              )
+            ) {
+              showExtras(event.currentTarget);
+            } else {
+              hideExtras(event.currentTarget);
+            }
+          });
+        });
+      }
+
+      function getQueryParameter(name) {
+        const match = RegExp("[?&]" + name + "=([^&]*)").exec(
+          window.location.search
+        );
+        return match && decodeURIComponent(match[1].replace(/\+/g, " "));
+      }
+
+      function init() {
+        // eslint-disable-line no-unused-vars
+        resetSortHeaders();
+
+        addCollapse();
+
+        showFilters();
+
+        sortColumn(find(".initial-sort"));
+
+        findAll(".sortable").forEach(function (elem) {
+          elem.addEventListener(
+            "click",
+            function () {
+              sortColumn(elem);
+            },
+            false
+          );
+        });
+      }
+
+      function sortTable(clicked, keyFunc) {
+        const rows = findAll(".results-table-row");
+        const reversed = !clicked.classList.contains("asc");
+        const sortedRows = sort(rows, keyFunc, reversed);
+        /* Whole table is removed here because browsers acts much slower
+         * when appending existing elements.
+         */
+        const thead = document.getElementById("results-table-head");
+        document.getElementById("results-table").remove();
+        const parent = document.createElement("table");
+        parent.id = "results-table";
+        parent.appendChild(thead);
+        sortedRows.forEach(function (elem) {
+          parent.appendChild(elem);
+        });
+        document.getElementsByTagName("BODY")[0].appendChild(parent);
+      }
+
+      function sort(items, keyFunc, reversed) {
+        const sortArray = items.map(function (item, i) {
+          return [keyFunc(item), i];
+        });
+
+        sortArray.sort(function (a, b) {
+          const keyA = a[0];
+          const keyB = b[0];
+
+          if (keyA == keyB) return 0;
+
+          if (reversed) {
+            return keyA < keyB ? 1 : -1;
+          } else {
+            return keyA > keyB ? 1 : -1;
+          }
+        });
+
+        return sortArray.map(function (item) {
+          const index = item[1];
+          return items[index];
+        });
+      }
+
+      function keyAlpha(colIndex) {
+        return function (elem) {
+          return elem.childNodes[1].childNodes[
+            colIndex
+          ].firstChild.data.toLowerCase();
+        };
+      }
+
+      function keyLink(colIndex) {
+        return function (elem) {
+          const dataCell = elem.childNodes[1].childNodes[colIndex].firstChild;
+          return dataCell == null ? "" : dataCell.innerText.toLowerCase();
+        };
+      }
+
+      function keyResult(colIndex) {
+        return function (elem) {
+          const strings = [
+            "Error",
+            "Failed",
+            "Rerun",
+            "XFailed",
+            "XPassed",
+            "Skipped",
+            "Passed",
+          ];
+          return strings.indexOf(
+            elem.childNodes[1].childNodes[colIndex].firstChild.data
+          );
+        };
+      }
+
+      function resetSortHeaders() {
+        findAll(".sort-icon").forEach(function (elem) {
+          elem.parentNode.removeChild(elem);
+        });
+        findAll(".sortable").forEach(function (elem) {
+          const icon = document.createElement("div");
+          icon.className = "sort-icon";
+          icon.textContent = "vvv";
+          elem.insertBefore(icon, elem.firstChild);
+          elem.classList.remove("desc", "active");
+          elem.classList.add("asc", "inactive");
+        });
+      }
+
+      function toggleSortStates(elem) {
+        //if active, toggle between asc and desc
+        if (elem.classList.contains("active")) {
+          elem.classList.toggle("asc");
+          elem.classList.toggle("desc");
+        }
+
+        //if inactive, reset all other functions and add ascending active
+        if (elem.classList.contains("inactive")) {
+          resetSortHeaders();
+          elem.classList.remove("inactive");
+          elem.classList.add("active");
+        }
+      }
+
+      function isAllRowsHidden(value) {
+        return value.hidden == false;
+      }
+
+      function filterTable(elem) {
+        // eslint-disable-line no-unused-vars
+        const outcomeAtt = "data-test-result";
+        const outcome = elem.getAttribute(outcomeAtt);
+        const classOutcome = outcome + " results-table-row";
+        const outcomeRows = document.getElementsByClassName(classOutcome);
+
+        for (let i = 0; i < outcomeRows.length; i++) {
+          outcomeRows[i].hidden = !elem.checked;
+        }
+
+        const rows = findAll(".results-table-row").filter(isAllRowsHidden);
+        const allRowsHidden = rows.length == 0 ? true : false;
+        const notFoundMessage = document.getElementById("not-found-message");
+        notFoundMessage.hidden = !allRowsHidden;
+      }
+    </script>
+    <h1>reports.html</h1>
+    <p>
+      Report generated on 15-Dec-2022 at 12:29:38 by
+      <a href="https://pypi.python.org/pypi/pytest-html">pytest-html</a> v3.2.0
+    </p>
+    <h2>Environment</h2>
+    <table id="environment">
+      <tr>
+        <td>Packages</td>
+        <td>{"pluggy": "1.0.0", "pytest": "7.2.0"}</td>
+      </tr>
+      <tr>
+        <td>Platform</td>
+        <td>Windows-10-10.0.22000-SP0</td>
+      </tr>
+      <tr>
+        <td>Plugins</td>
+        <td>{"html": "3.2.0", "metadata": "2.0.4"}</td>
+      </tr>
+      <tr>
+        <td>Python</td>
+        <td>3.10.8</td>
+      </tr>
+    </table>
+    <h2>Summary</h2>
+    <p>22 tests ran in 222.43 seconds.</p>
+    <p class="filter" hidden="true">
+      (Un)check the boxes to filter the results.
+    </p>
+    <input
+      checked="true"
+      class="filter"
+      data-test-result="passed"
+      hidden="true"
+      name="filter_checkbox"
+      onChange="filterTable(this)"
+      type="checkbox"
+    /><span class="passed">16 passed</span>,
+    <input
+      checked="true"
+      class="filter"
+      data-test-result="skipped"
+      disabled="true"
+      hidden="true"
+      name="filter_checkbox"
+      onChange="filterTable(this)"
+      type="checkbox"
+    /><span class="skipped">0 skipped</span>,
+    <input
+      checked="true"
+      class="filter"
+      data-test-result="failed"
+      hidden="true"
+      name="filter_checkbox"
+      onChange="filterTable(this)"
+      type="checkbox"
+    /><span class="failed">6 failed</span>,
+    <input
+      checked="true"
+      class="filter"
+      data-test-result="error"
+      disabled="true"
+      hidden="true"
+      name="filter_checkbox"
+      onChange="filterTable(this)"
+      type="checkbox"
+    /><span class="error">0 errors</span>,
+    <input
+      checked="true"
+      class="filter"
+      data-test-result="xfailed"
+      disabled="true"
+      hidden="true"
+      name="filter_checkbox"
+      onChange="filterTable(this)"
+      type="checkbox"
+    /><span class="xfailed">0 expected failures</span>,
+    <input
+      checked="true"
+      class="filter"
+      data-test-result="xpassed"
+      disabled="true"
+      hidden="true"
+      name="filter_checkbox"
+      onChange="filterTable(this)"
+      type="checkbox"
+    /><span class="xpassed">0 unexpected passes</span>
+    <h2>Results</h2>
+    <table id="results-table">
+      <thead id="results-table-head">
+        <tr>
+          <th class="sortable result initial-sort" col="result">Result</th>
+          <th class="sortable" col="name">Test</th>
+          <th class="sortable" col="duration">Duration</th>
+          <th class="sortable links" col="links">Links</th>
+        </tr>
+        <tr hidden="true" id="not-found-message">
+          <th colspan="4">No results found. Try to check the filters</th>
+        </tr>
+      </thead>
+      <tbody class="failed results-table-row">
+        <tr>
+          <td class="col-result">Failed</td>
+          <td class="col-name">
+            test_svburger_hw_done.py::test_sign_up_with_only_required_fields
+          </td>
+          <td class="col-duration">3.05</td>
+          <td class="col-links"></td>
+        </tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="log">
+              setup = &lt;selenium.webdriver.chrome.webdriver.WebDriver
+              (session=&quot;50c43b0249a84f2a20269f01f8847fe2&quot;)&gt;<br /><br />
+              def test_sign_up_with_only_required_fields(setup):<br />
+              &quot;&quot;&quot;try to sign up with only required
+              fields&quot;&quot;&quot;<br />
+              driver = setup<br />
+              user = new_user<br />
+              user[&quot;firstname&quot;] = &quot;&quot;<br />
+              user[&quot;lastname&quot;] = &quot;&quot;<br />
+              register(user[&quot;firstname&quot;],
+              user[&quot;lastname&quot;],<br />
+              user[&#x27;email&#x27;], user[&#x27;password&#x27;],
+              user[&#x27;password&#x27;], driver)<br />
+              flag = True<br />
+              try:<br />
+              assert driver.find_element(By.CLASS_NAME,
+              &#x27;card3&#x27;).is_displayed()<br />
+              except
+              selenium.common.exceptions.UnexpectedAlertPresentException:<br />
+              <br />
+              flag = False<br />
+              if not flag:<br />&gt; raise AssertionError(f&quot;got unexpected
+              alert ,&quot;<br />
+              f&quot; expected to register success with only required
+              fields\n{user}&quot;)<br /><span class="error"
+                >E AssertionError: got unexpected alert , expected to register
+                success with only required fields</span
+              ><br /><span class="error"
+                >E {&#x27;email&#x27;: &#x27;TnzXPK@gmail.com&#x27;,
+                &#x27;password&#x27;: &#x27;!Edi2222&#x27;,
+                &#x27;firstname&#x27;: &#x27;&#x27;, &#x27;lastname&#x27;:
+                &#x27;&#x27;}</span
+              ><br /><br />test_svburger_hw_done.py:338: AssertionError<br />
+            </div>
+          </td>
+        </tr>
+      </tbody>
+      <tbody class="failed results-table-row">
+        <tr>
+          <td class="col-result">Failed</td>
+          <td class="col-name">
+            test_svburger_hw_done.py::test_sign_up_invalid[user2-First name must
+            be between 6 and 10 characters]
+          </td>
+          <td class="col-duration">3.99</td>
+          <td class="col-links"></td>
+        </tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="log">
+              setup = &lt;selenium.webdriver.chrome.webdriver.WebDriver
+              (session=&quot;a9cf79c0e8fa14130f25971cf67244f7&quot;)&gt;<br />user
+              = {&#x27;email&#x27;: &#x27;udqebE@gmail.com&#x27;,
+              &#x27;firstname&#x27;: &#x27;im&#x27;, &#x27;lastname&#x27;:
+              &#x27;dandil&#x27;, &#x27;password&#x27;: &#x27;123456&#x27;,
+              ...}, expected = &#x27;First name must be between 6 and 10
+              characters&#x27;<br /><br />
+              @pytest.mark.parametrize(&#x27;user,expected&#x27;,<br />
+              [(wrong_user, &quot;The email address is already in use by another
+              account.&quot;),<br />
+              (wrong_user2, &quot;password and confirm error&quot;),<br />
+              (wrong_user3, &quot;First name must be between 6 and 10
+              characters&quot;),<br />
+              (wrong_user4, &quot;Last name must be between 6 and 10
+              characters&quot;),<br />
+              (wrong_user5, &quot;Password should be at maxinum 10
+              characters&quot;),<br />
+              (wrong_user6, &quot;Password should be at least 6
+              characters&quot;)])<br />
+              def test_sign_up_invalid(setup, user, expected):<br />
+              &quot;&quot;&quot;<br />
+              test cases sign up with used email and sign up with passwords
+              that<br />
+              not match<br />
+              :param setup: driver<br />
+              :param user: information to send<br />
+              :param expected: message expect from the page<br />
+              :return:<br />
+              &quot;&quot;&quot;<br />
+              driver = setup<br />
+              register(*user.values(), driver)<br />
+              time.sleep(1)<br />
+              flag = True<br />
+              try:<br />
+              <br />
+              assert expected in get_text_from_alert(driver)<br />
+              except selenium.common.exceptions.NoAlertPresentException:<br />
+              flag = False<br />
+              if not flag:<br />&gt; raise AssertionError(f&quot;alert not pop
+              up with expected: {expected}\n with this user
+              details:\t{user}&quot;)<br /><span class="error"
+                >E AssertionError: alert not pop up with expected: First name
+                must be between 6 and 10 characters</span
+              ><br /><span class="error"
+                >E with this user details: {&#x27;firstname&#x27;:
+                &#x27;im&#x27;, &#x27;lastname&#x27;: &#x27;dandil&#x27;,
+                &#x27;email&#x27;: &#x27;udqebE@gmail.com&#x27;,
+                &#x27;password&#x27;: &#x27;123456&#x27;,
+                &#x27;repassword&#x27;: &#x27;123456&#x27;}</span
+              ><br /><br />test_svburger_hw_done.py:368: AssertionError<br />
+            </div>
+          </td>
+        </tr>
+      </tbody>
+      <tbody class="failed results-table-row">
+        <tr>
+          <td class="col-result">Failed</td>
+          <td class="col-name">
+            test_svburger_hw_done.py::test_sign_up_invalid[user3-Last name must
+            be between 6 and 10 characters]
+          </td>
+          <td class="col-duration">3.90</td>
+          <td class="col-links"></td>
+        </tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="log">
+              setup = &lt;selenium.webdriver.chrome.webdriver.WebDriver
+              (session=&quot;89b27430cd4df45963d09f0838085434&quot;)&gt;<br />user
+              = {&#x27;email&#x27;: &#x27;wFIlZJ@gmail.com&#x27;,
+              &#x27;firstname&#x27;: &#x27;ggggg&#x27;, &#x27;lastname&#x27;:
+              &#x27;imasdsadsadasasds&#x27;, &#x27;password&#x27;:
+              &#x27;123456&#x27;, ...}, expected = &#x27;Last name must be
+              between 6 and 10 characters&#x27;<br /><br />
+              @pytest.mark.parametrize(&#x27;user,expected&#x27;,<br />
+              [(wrong_user, &quot;The email address is already in use by another
+              account.&quot;),<br />
+              (wrong_user2, &quot;password and confirm error&quot;),<br />
+              (wrong_user3, &quot;First name must be between 6 and 10
+              characters&quot;),<br />
+              (wrong_user4, &quot;Last name must be between 6 and 10
+              characters&quot;),<br />
+              (wrong_user5, &quot;Password should be at maxinum 10
+              characters&quot;),<br />
+              (wrong_user6, &quot;Password should be at least 6
+              characters&quot;)])<br />
+              def test_sign_up_invalid(setup, user, expected):<br />
+              &quot;&quot;&quot;<br />
+              test cases sign up with used email and sign up with passwords
+              that<br />
+              not match<br />
+              :param setup: driver<br />
+              :param user: information to send<br />
+              :param expected: message expect from the page<br />
+              :return:<br />
+              &quot;&quot;&quot;<br />
+              driver = setup<br />
+              register(*user.values(), driver)<br />
+              time.sleep(1)<br />
+              flag = True<br />
+              try:<br />
+              <br />&gt; assert expected in get_text_from_alert(driver)<br /><span
+                class="error"
+                >E assert &#x27;Last name must be between 6 and 10
+                characters&#x27; in &#x27;Last name must be between 2 and 10
+                characters&#x27;</span
+              ><br /><span class="error"
+                >E + where &#x27;Last name must be between 2 and 10
+                characters&#x27; =
+                get_text_from_alert(&lt;selenium.webdriver.chrome.webdriver.WebDriver
+                (session=&quot;89b27430cd4df45963d09f0838085434&quot;)&gt;)</span
+              ><br /><br />test_svburger_hw_done.py:364: AssertionError<br />
+            </div>
+          </td>
+        </tr>
+      </tbody>
+      <tbody class="failed results-table-row">
+        <tr>
+          <td class="col-result">Failed</td>
+          <td class="col-name">
+            test_svburger_hw_done.py::test_sign_up_invalid[user4-Password should
+            be at maxinum 10 characters]
+          </td>
+          <td class="col-duration">4.03</td>
+          <td class="col-links"></td>
+        </tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="log">
+              setup = &lt;selenium.webdriver.chrome.webdriver.WebDriver
+              (session=&quot;9e24d7e25e3dade14da81926f75e5b63&quot;)&gt;<br />user
+              = {&#x27;email&#x27;: &#x27;aXbjbn@gmail.com&#x27;,
+              &#x27;firstname&#x27;: &#x27;imasd&#x27;, &#x27;lastname&#x27;:
+              &#x27;dandil&#x27;, &#x27;password&#x27;:
+              &#x27;1234561111111111111111&#x27;, ...}, expected =
+              &#x27;Password should be at maxinum 10 characters&#x27;<br /><br />
+              @pytest.mark.parametrize(&#x27;user,expected&#x27;,<br />
+              [(wrong_user, &quot;The email address is already in use by another
+              account.&quot;),<br />
+              (wrong_user2, &quot;password and confirm error&quot;),<br />
+              (wrong_user3, &quot;First name must be between 6 and 10
+              characters&quot;),<br />
+              (wrong_user4, &quot;Last name must be between 6 and 10
+              characters&quot;),<br />
+              (wrong_user5, &quot;Password should be at maxinum 10
+              characters&quot;),<br />
+              (wrong_user6, &quot;Password should be at least 6
+              characters&quot;)])<br />
+              def test_sign_up_invalid(setup, user, expected):<br />
+              &quot;&quot;&quot;<br />
+              test cases sign up with used email and sign up with passwords
+              that<br />
+              not match<br />
+              :param setup: driver<br />
+              :param user: information to send<br />
+              :param expected: message expect from the page<br />
+              :return:<br />
+              &quot;&quot;&quot;<br />
+              driver = setup<br />
+              register(*user.values(), driver)<br />
+              time.sleep(1)<br />
+              flag = True<br />
+              try:<br />
+              <br />
+              assert expected in get_text_from_alert(driver)<br />
+              except selenium.common.exceptions.NoAlertPresentException:<br />
+              flag = False<br />
+              if not flag:<br />&gt; raise AssertionError(f&quot;alert not pop
+              up with expected: {expected}\n with this user
+              details:\t{user}&quot;)<br /><span class="error"
+                >E AssertionError: alert not pop up with expected: Password
+                should be at maxinum 10 characters</span
+              ><br /><span class="error"
+                >E with this user details: {&#x27;firstname&#x27;:
+                &#x27;imasd&#x27;, &#x27;lastname&#x27;: &#x27;dandil&#x27;,
+                &#x27;email&#x27;: &#x27;aXbjbn@gmail.com&#x27;,
+                &#x27;password&#x27;: &#x27;1234561111111111111111&#x27;,
+                &#x27;repassword&#x27;:
+                &#x27;1234561111111111111111&#x27;}</span
+              ><br /><br />test_svburger_hw_done.py:368: AssertionError<br />
+            </div>
+          </td>
+        </tr>
+      </tbody>
+      <tbody class="failed results-table-row">
+        <tr>
+          <td class="col-result">Failed</td>
+          <td class="col-name">
+            test_svburger_hw_done.py::test_invalid_low_quantity_on_order
+          </td>
+          <td class="col-duration">6.77</td>
+          <td class="col-links"></td>
+        </tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="log">
+              setup = &lt;selenium.webdriver.chrome.webdriver.WebDriver
+              (session=&quot;603291f358d9c401ff788c913d303c56&quot;)&gt;<br /><br />
+              def test_invalid_low_quantity_on_order(setup):<br />
+              &quot;&quot;&quot;verify that cant send order with quantity of
+              products that lower then 1&quot;&quot;&quot;<br />
+              driver = setup<br />
+              login(valid_login_user[&quot;email&quot;],
+              valid_login_user[&quot;password&quot;], driver)<br />
+              select_products((&quot;Vegan&quot;,), driver)<br />
+              details = reserve_order((&quot;-150&quot;,), coupon=coupons[0],
+              table=&quot;1&quot;, driver=driver)<br />
+              send_order(driver)<br />
+              flag = True<br />
+              try:<br />
+              assert &quot;Invalid value in quantity&quot; in
+              get_text_from_alert(driver)<br />
+              except selenium.common.exceptions.NoAlertPresentException:<br />
+              flag = False<br />
+              if not flag:<br />&gt; raise AssertionError(f&quot;alert not pop
+              up with expected: &#x27;Invalid value in quantity&#x27;
+              \ndetails={details}&quot;)<br /><span class="error"
+                >E AssertionError: alert not pop up with expected: &#x27;Invalid
+                value in quantity&#x27; </span
+              ><br /><span class="error"
+                >E details={&#x27;products&#x27;: [&#x27;Vegan&#x27;],
+                &#x27;p_amounts&#x27;: [&#x27;-150&#x27;], &#x27;coupon&#x27;:
+                &#x27;150&#x27;, &#x27;table&#x27;: &#x27;1&#x27;,
+                &#x27;prices&#x27;: [-6750], &#x27;subtotal_price&#x27;:
+                -6750}</span
+              ><br /><br />test_svburger_hw_done.py:410: AssertionError<br />
+            </div>
+          </td>
+        </tr>
+      </tbody>
+      <tbody class="failed results-table-row">
+        <tr>
+          <td class="col-result">Failed</td>
+          <td class="col-name">
+            test_svburger_hw_done.py::test_invalid_high_quantity_on_order
+          </td>
+          <td class="col-duration">6.70</td>
+          <td class="col-links"></td>
+        </tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="log">
+              setup = &lt;selenium.webdriver.chrome.webdriver.WebDriver
+              (session=&quot;1af27a32750d57fed73753ef198118ff&quot;)&gt;<br /><br />
+              def test_invalid_high_quantity_on_order(setup):<br />
+              &quot;&quot;&quot;verify that cant send order with quantity of
+              products that greater 2&quot;&quot;&quot;<br />
+              driver = setup<br />
+              login(valid_login_user[&quot;email&quot;],
+              valid_login_user[&quot;password&quot;], driver)<br />
+              select_products((&quot;Burger&quot;,), driver)<br />
+              details = reserve_order((&quot;5&quot;,), coupon=&quot;&quot;,
+              table=&quot;1&quot;, driver=driver)<br />
+              send_order(driver)<br />
+              flag = True<br />
+              try:<br />
+              assert &quot;Invalid value in quantity&quot; in
+              get_text_from_alert(driver)<br />
+              except selenium.common.exceptions.NoAlertPresentException:<br />
+              flag = False<br />
+              if not flag:<br />&gt; raise AssertionError(f&quot;alert not pop
+              up with expected: &#x27;Invalid value in quantity&#x27;
+              \ndetails={details}&quot;)<br /><span class="error"
+                >E AssertionError: alert not pop up with expected: &#x27;Invalid
+                value in quantity&#x27; </span
+              ><br /><span class="error"
+                >E details={&#x27;products&#x27;: [&#x27;Burger&#x27;],
+                &#x27;p_amounts&#x27;: [&#x27;5&#x27;], &#x27;coupon&#x27;:
+                &#x27;&#x27;, &#x27;table&#x27;: &#x27;1&#x27;,
+                &#x27;prices&#x27;: [225], &#x27;subtotal_price&#x27;:
+                225}</span
+              ><br /><br />test_svburger_hw_done.py:426: AssertionError<br />
+            </div>
+          </td>
+        </tr>
+      </tbody>
+      <tbody class="passed results-table-row">
+        <tr>
+          <td class="col-result">Passed</td>
+          <td class="col-name">test_svburger_hw_done.py::test_sanity</td>
+          <td class="col-duration">24.00</td>
+          <td class="col-links"></td>
+        </tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="empty log">No log output captured.</div>
+          </td>
+        </tr>
+      </tbody>
+      <tbody class="passed results-table-row">
+        <tr>
+          <td class="col-result">Passed</td>
+          <td class="col-name">
+            test_svburger_hw_done.py::test_forget_password_functional
+          </td>
+          <td class="col-duration">6.17</td>
+          <td class="col-links"></td>
+        </tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="empty log">No log output captured.</div>
+          </td>
+        </tr>
+      </tbody>
+      <tbody class="passed results-table-row">
+        <tr>
+          <td class="col-result">Passed</td>
+          <td class="col-name">
+            test_svburger_hw_done.py::test_login_page_show_up
+          </td>
+          <td class="col-duration">18.64</td>
+          <td class="col-links"></td>
+        </tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="empty log">No log output captured.</div>
+          </td>
+        </tr>
+      </tbody>
+      <tbody class="passed results-table-row">
+        <tr>
+          <td class="col-result">Passed</td>
+          <td class="col-name">
+            test_svburger_hw_done.py::test_password_field
+          </td>
+          <td class="col-duration">18.49</td>
+          <td class="col-links"></td>
+        </tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="empty log">No log output captured.</div>
+          </td>
+        </tr>
+      </tbody>
+      <tbody class="passed results-table-row">
+        <tr>
+          <td class="col-result">Passed</td>
+          <td class="col-name">test_svburger_hw_done.py::test_login</td>
+          <td class="col-duration">3.56</td>
+          <td class="col-links"></td>
+        </tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="empty log">No log output captured.</div>
+          </td>
+        </tr>
+      </tbody>
+      <tbody class="passed results-table-row">
+        <tr>
+          <td class="col-result">Passed</td>
+          <td class="col-name">
+            test_svburger_hw_done.py::test_login_invalid[shilatmaymon1234@gmail.com-]
+          </td>
+          <td class="col-duration">4.90</td>
+          <td class="col-links"></td>
+        </tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="empty log">No log output captured.</div>
+          </td>
+        </tr>
+      </tbody>
+      <tbody class="passed results-table-row">
+        <tr>
+          <td class="col-result">Passed</td>
+          <td class="col-name">
+            test_svburger_hw_done.py::test_login_invalid[-Shilat123]
+          </td>
+          <td class="col-duration">4.57</td>
+          <td class="col-links"></td>
+        </tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="empty log">No log output captured.</div>
+          </td>
+        </tr>
+      </tbody>
+      <tbody class="passed results-table-row">
+        <tr>
+          <td class="col-result">Passed</td>
+          <td class="col-name">
+            test_svburger_hw_done.py::test_login_invalid[-]
+          </td>
+          <td class="col-duration">4.65</td>
+          <td class="col-links"></td>
+        </tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="empty log">No log output captured.</div>
+          </td>
+        </tr>
+      </tbody>
+      <tbody class="passed results-table-row">
+        <tr>
+          <td class="col-result">Passed</td>
+          <td class="col-name">test_svburger_hw_done.py::test_signup</td>
+          <td class="col-duration">4.17</td>
+          <td class="col-links"></td>
+        </tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="empty log">No log output captured.</div>
+          </td>
+        </tr>
+      </tbody>
+      <tbody class="passed results-table-row">
+        <tr>
+          <td class="col-result">Passed</td>
+          <td class="col-name">
+            test_svburger_hw_done.py::test_sign_up_invalid[user0-The email
+            address is already in use by another account.]
+          </td>
+          <td class="col-duration">3.95</td>
+          <td class="col-links"></td>
+        </tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="empty log">No log output captured.</div>
+          </td>
+        </tr>
+      </tbody>
+      <tbody class="passed results-table-row">
+        <tr>
+          <td class="col-result">Passed</td>
+          <td class="col-name">
+            test_svburger_hw_done.py::test_sign_up_invalid[user1-password and
+            confirm error]
+          </td>
+          <td class="col-duration">3.86</td>
+          <td class="col-links"></td>
+        </tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="empty log">No log output captured.</div>
+          </td>
+        </tr>
+      </tbody>
+      <tbody class="passed results-table-row">
+        <tr>
+          <td class="col-result">Passed</td>
+          <td class="col-name">
+            test_svburger_hw_done.py::test_sign_up_invalid[user5-Password should
+            be at least 6 characters]
+          </td>
+          <td class="col-duration">4.14</td>
+          <td class="col-links"></td>
+        </tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="empty log">No log output captured.</div>
+          </td>
+        </tr>
+      </tbody>
+      <tbody class="passed results-table-row">
+        <tr>
+          <td class="col-result">Passed</td>
+          <td class="col-name">
+            test_svburger_hw_done.py::test_selected_products_apears_in_reserve
+          </td>
+          <td class="col-duration">8.55</td>
+          <td class="col-links"></td>
+        </tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="empty log">No log output captured.</div>
+          </td>
+        </tr>
+      </tbody>
+      <tbody class="passed results-table-row">
+        <tr>
+          <td class="col-result">Passed</td>
+          <td class="col-name">
+            test_svburger_hw_done.py::test_products_total_price
+          </td>
+          <td class="col-duration">8.79</td>
+          <td class="col-links"></td>
+        </tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="empty log">No log output captured.</div>
+          </td>
+        </tr>
+      </tbody>
+      <tbody class="passed results-table-row">
+        <tr>
+          <td class="col-result">Passed</td>
+          <td class="col-name">
+            test_svburger_hw_done.py::test_select_product_color_change
+          </td>
+          <td class="col-duration">22.14</td>
+          <td class="col-links"></td>
+        </tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="empty log">No log output captured.</div>
+          </td>
+        </tr>
+      </tbody>
+      <tbody class="passed results-table-row">
+        <tr>
+          <td class="col-result">Passed</td>
+          <td class="col-name">
+            test_svburger_hw_done.py::test_select_5_products_color
+          </td>
+          <td class="col-duration">10.71</td>
+          <td class="col-links"></td>
+        </tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="empty log">No log output captured.</div>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </body>
+</html>
